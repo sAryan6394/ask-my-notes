@@ -1,9 +1,22 @@
+import os
+import io
+import pymupdf as fitz
+import pytesseract
+from PIL import Image
+from dotenv import load_dotenv
+from google import genai
 from youtube_transcript_api import YouTubeTranscriptApi
+import trafilatura
+
+load_dotenv()
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
 
 def format_timestamp(seconds):
     m = int(seconds // 60)
     s = int(seconds % 60)
     return f"{m}:{s:02d}"
+
 
 def ingest_text_file(filepath, chunk_size=200):
     with open(filepath, "r", encoding="utf-8") as f:
@@ -12,13 +25,15 @@ def ingest_text_file(filepath, chunk_size=200):
     chunks = []
     for i in range(0, len(text), chunk_size):
         piece = text[i:i + chunk_size]
-        chunks.append({
-            "text": piece,
-            "source": filepath,
-            "source_type": "text",
-            "location": f"position {i}"
-        })
+        if piece.strip():
+            chunks.append({
+                "text": piece,
+                "source": filepath,
+                "source_type": "text",
+                "location": f"position {i}"
+            })
     return chunks
+
 
 def ingest_youtube(video_id, chunk_seconds=60):
     ytt_api = YouTubeTranscriptApi()
@@ -47,4 +62,50 @@ def ingest_youtube(video_id, chunk_seconds=60):
             "source_type": "youtube",
             "location": format_timestamp(current_start)
         })
+    return chunks
+
+
+def ingest_pdf(filepath, chunk_size=200):
+    doc = fitz.open(filepath)
+    chunks = []
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        text = page.get_text()
+
+        if not text.strip():
+            pix = page.get_pixmap(dpi=200)
+            img = Image.open(io.BytesIO(pix.tobytes("png")))
+            text = pytesseract.image_to_string(img)
+
+        for i in range(0, len(text), chunk_size):
+            piece = text[i:i + chunk_size]
+            if piece.strip():
+                chunks.append({
+                    "text": piece,
+                    "source": filepath,
+                    "source_type": "pdf",
+                    "location": f"page {page_num + 1}"
+                })
+
+    return chunks
+
+
+def ingest_web_article(url, chunk_size=200):
+    downloaded = trafilatura.fetch_url(url)
+    text = trafilatura.extract(downloaded)
+
+    if not text:
+        return []
+
+    chunks = []
+    for i in range(0, len(text), chunk_size):
+        piece = text[i:i + chunk_size]
+        if piece.strip():
+            chunks.append({
+                "text": piece,
+                "source": url,
+                "source_type": "web",
+                "location": f"position {i}"
+            })
     return chunks
