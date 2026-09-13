@@ -65,11 +65,12 @@ def ingest_youtube(video_id, chunk_seconds=60):
     return chunks
 
 
-def ingest_pdf(filepath, chunk_size=200):
+def ingest_pdf(filepath, chunk_size=200, progress_callback=None):
     doc = fitz.open(filepath)
     chunks = []
+    total_pages = len(doc)
 
-    for page_num in range(len(doc)):
+    for page_num in range(total_pages):
         page = doc[page_num]
         text = page.get_text()
 
@@ -87,6 +88,9 @@ def ingest_pdf(filepath, chunk_size=200):
                     "source_type": "pdf",
                     "location": f"page {page_num + 1}"
                 })
+
+        if progress_callback:
+            progress_callback(page_num + 1, total_pages)
 
     return chunks
 
