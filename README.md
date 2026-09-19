@@ -1,25 +1,26 @@
 # Ask-My-Notes
 
-A multi-source RAG (Retrieval-Augmented Generation) knowledge base that lets you 
-ask questions across your PDFs, YouTube lecture transcripts, and web articles — 
-with answers grounded in your actual sources, not hallucinated.
+A multi-source RAG (Retrieval-Augmented Generation) knowledge base that lets you
+ask questions across your PDFs and YouTube lecture transcripts — with answers
+grounded in your actual sources, not hallucinated.
 
 ## Features
-- Multi-source ingestion: PDFs (including scanned/OCR), YouTube transcripts, web articles, plain text
-- Meaning-based retrieval using sentence embeddings and cosine similarity (not keyword matching)
+- Multi-source ingestion: PDFs (including scanned/OCR), YouTube transcripts, plain text
+- Sentence-aware recursive chunking with overlap — preserves context across chunk boundaries instead of cutting sentences mid-way
+- Hybrid retrieval: FAISS dense vector search (meaning-based) + BM25 sparse keyword search, fused via Reciprocal Rank Fusion — catches both semantic matches and exact terms (acronyms, IDs, proper nouns) that embeddings alone tend to miss
 - Grounded AI answers using Google's Gemini API
 - Conversational follow-ups — remembers recent context for questions like "explain more"
-- Persistent storage — sources stay loaded across sessions
+- Persistent storage — sources stay loaded across sessions (FAISS index + metadata on disk)
 - Clean, custom-themed chat interface built with Streamlit
 
 ## How it works
-1. Documents are split into chunks and tagged with their source and location (page number, video timestamp, etc.)
-2. Each chunk is converted into an embedding — a vector representing its meaning
-3. A question is compared against every chunk using cosine similarity
-4. The top matching chunks are passed to an AI model, instructed to answer only from that retrieved context
+1. Documents are split into sentence-aware, overlapping chunks and tagged with their source and location (page number, video timestamp, etc.)
+2. Each chunk is embedded (all-MiniLM-L6-v2, 384-dim) and indexed in a FAISS HNSW index for fast approximate nearest-neighbor search; the same chunks are also indexed for BM25 keyword search
+3. A question is run through both retrieval paths in parallel — dense (meaning) and sparse (keyword) — and the two ranked result lists are merged via Reciprocal Rank Fusion
+4. The top fused matches are passed to an AI model, instructed to answer only from that retrieved context
 
 ## Stack
-Python, Streamlit, sentence-transformers, numpy, Google Gemini API, PyMuPDF, pytesseract, youtube-transcript-api, trafilatura
+Python, Streamlit, sentence-transformers, FAISS, rank-bm25, numpy, Google Gemini API, PyMuPDF, pytesseract, youtube-transcript-api
 
 ## Run locally
 ```bash

@@ -89,7 +89,6 @@ tokenizers==0.23.2
 toml==0.10.2
 torch==2.14.0
 tqdm==4.70.0
-trafilatura
 transformers==5.16.1
 typer==0.27.2
 typing-inspection==0.4.4

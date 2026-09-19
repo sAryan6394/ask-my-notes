@@ -6,7 +6,7 @@ import re
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from google import genai
-from ingestion import ingest_text_file, ingest_youtube, ingest_pdf, ingest_web_article
+from ingestion import ingest_text_file, ingest_youtube, ingest_pdf
 from vector_store import VectorStore
 from hybrid_search import HybridSearch
 
@@ -290,15 +290,6 @@ with st.sidebar:
                 new_chunks = ingest_youtube(video_id)
                 add_chunks(new_chunks)
             st.success(f"Video added — {len(new_chunks)} chunks")
-
-    web_input = st.text_input("Article URL", placeholder="Paste a link...")
-    if st.button("Add article", use_container_width=True) and web_input:
-        already_added = any(web_input == c["source"] for c in st.session_state.vector_store.chunks)
-        if not already_added:
-            with st.spinner("Fetching article..."):
-                new_chunks = ingest_web_article(web_input)
-                add_chunks(new_chunks)
-            st.success(f"Article added — {len(new_chunks)} chunks")
 
     st.divider()
     st.caption(f"{len(st.session_state.vector_store)} chunks loaded")

@@ -8,7 +8,6 @@ from PIL import Image
 from dotenv import load_dotenv
 from google import genai
 from youtube_transcript_api import YouTubeTranscriptApi
-import trafilatura
 
 load_dotenv()
 
@@ -183,22 +182,4 @@ def ingest_pdf(filepath, chunk_size=500, overlap=50, progress_callback=None):
         if progress_callback:
             progress_callback(page_num + 1, total_pages)
 
-    return chunks
-
-
-def ingest_web_article(url, chunk_size=500, overlap=50):
-    downloaded = trafilatura.fetch_url(url)
-    text = trafilatura.extract(downloaded)
-
-    if not text:
-        return []
-
-    chunks = []
-    for piece, offset in chunk_text(text, chunk_size=chunk_size, overlap=overlap):
-        chunks.append({
-            "text": piece,
-            "source": url,
-            "source_type": "web",
-            "location": f"position {offset}"
-        })
     return chunks
