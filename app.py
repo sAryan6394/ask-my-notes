@@ -8,6 +8,7 @@ from sentence_transformers import SentenceTransformer
 from google import genai
 from ingestion import ingest_text_file, ingest_youtube, ingest_pdf, ingest_web_article
 from vector_store import VectorStore
+from hybrid_search import HybridSearch
 
 load_dotenv()
 
@@ -171,6 +172,8 @@ client = load_client()
 
 if "vector_store" not in st.session_state:
     st.session_state.vector_store = VectorStore()  # loads from disk if present
+if "hybrid_search" not in st.session_state:
+    st.session_state.hybrid_search = HybridSearch(st.session_state.vector_store)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -325,7 +328,7 @@ if question:
 
         contextual_query = build_contextual_query(question, history_before)
         query_embedding = model.encode(contextual_query)
-        top_chunks = st.session_state.vector_store.search(query_embedding, top_k=5)
+        top_chunks = st.session_state.hybrid_search.search(contextual_query, query_embedding, top_k=5)
 
         combined_context = "\n\n".join(
             f"[Source: {c['source']} @ {c['location']}]\n{c['text']}"
