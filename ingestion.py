@@ -1,5 +1,7 @@
 import os
 import io
+import re
+import platform
 import pymupdf as fitz
 import pytesseract
 from PIL import Image
@@ -9,7 +11,18 @@ from youtube_transcript_api import YouTubeTranscriptApi
 import trafilatura
 
 load_dotenv()
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+# --- Tesseract path: portable across Windows / Linux / Docker ---
+# Set TESSERACT_CMD in your .env if it's not on PATH.
+_tesseract_cmd = os.getenv("TESSERACT_CMD")
+if _tesseract_cmd:
+    pytesseract.pytesseract.tesseract_cmd = _tesseract_cmd
+elif platform.system() == "Windows":
+    _default_win_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(_default_win_path):
+        pytesseract.pytesseract.tesseract_cmd = _default_win_path
+# On Linux/Docker, pytesseract finds `tesseract` on PATH automatically
+# as long as the tesseract-ocr package is installed in the image.
 
 
 def format_timestamp(seconds):
@@ -18,20 +31,100 @@ def format_timestamp(seconds):
     return f"{m}:{s:02d}"
 
 
-def ingest_text_file(filepath, chunk_size=200):
+# --- Sentence-aware recursive chunking with overlap ---
+
+_SENTENCE_SPLIT_RE = re.compile(r'(?<=[.!?])\s+')
+
+
+def _split_into_sentences(text):
+    text = text.strip()
+    if not text:
+        return []
+    sentences = _SENTENCE_SPLIT_RE.split(text)
+    return [s for s in sentences if s.strip()]
+
+
+def chunk_text(text, chunk_size=500, overlap=50):
+    """
+    Sentence-aware chunking with overlap, replacing the old fixed-width
+    character slicing (which used to cut sentences in half).
+
+    - Packs whole sentences into chunks up to `chunk_size` characters.
+    - A single sentence longer than `chunk_size` is hard-split as a fallback
+      (recursive character split), so nothing is ever silently dropped.
+    - Each chunk after the first carries the trailing `overlap` characters
+      of the previous chunk, so context/references aren't lost right at a
+      chunk boundary.
+
+    Returns a list of (chunk_text, start_offset) tuples. `start_offset` is
+    the character position of the chunk's own (non-overlap) content in the
+    original text — used for the "position N" location tag.
+    """
+    sentences = _split_into_sentences(text)
+    if not sentences:
+        return []
+
+    # Find each sentence's start offset in the original text.
+    sentence_spans = []
+    cursor = 0
+    for s in sentences:
+        idx = text.find(s, cursor)
+        if idx == -1:
+            idx = cursor  # shouldn't happen, but don't crash on it
+        sentence_spans.append((s, idx))
+        cursor = idx + len(s)
+
+    raw_chunks = []  # (text, start_offset)
+    current_text = ""
+    current_start = None
+
+    for s, start in sentence_spans:
+        if len(s) > chunk_size:
+            # Flush whatever we've built up, then hard-split the oversized sentence.
+            if current_text.strip():
+                raw_chunks.append((current_text, current_start))
+                current_text, current_start = "", None
+            for i in range(0, len(s), chunk_size):
+                raw_chunks.append((s[i:i + chunk_size], start + i))
+            continue
+
+        if not current_text:
+            current_text = s
+            current_start = start
+        elif len(current_text) + 1 + len(s) <= chunk_size:
+            current_text += " " + s
+        else:
+            raw_chunks.append((current_text, current_start))
+            current_text = s
+            current_start = start
+
+    if current_text.strip():
+        raw_chunks.append((current_text, current_start))
+
+    # Apply overlap: prepend the tail of the previous chunk's own text.
+    final_chunks = []
+    for i, (chunk, start) in enumerate(raw_chunks):
+        if i == 0 or overlap <= 0:
+            final_chunks.append((chunk, start))
+        else:
+            prefix = raw_chunks[i - 1][0][-overlap:]
+            final_chunks.append((f"{prefix} {chunk}", start))
+
+    return final_chunks
+
+
+def ingest_text_file(filepath, chunk_size=500, overlap=50):
     with open(filepath, "r", encoding="utf-8") as f:
         text = f.read()
 
     chunks = []
-    for i in range(0, len(text), chunk_size):
-        piece = text[i:i + chunk_size]
-        if piece.strip():
-            chunks.append({
-                "text": piece,
-                "source": filepath,
-                "source_type": "text",
-                "location": f"position {i}"
-            })
+    for piece, offset in chunk_text(text, chunk_size=chunk_size, overlap=overlap):
+        chunks.append({
+            "text": piece,
+            "source": filepath,
+            "source_type": "text",
+            "location": f"position {offset}"
+        })
     return chunks
 
 
@@ -65,7 +158,7 @@ def ingest_youtube(video_id, chunk_seconds=60):
     return chunks
 
 
-def ingest_pdf(filepath, chunk_size=200, progress_callback=None):
+def ingest_pdf(filepath, chunk_size=500, overlap=50, progress_callback=None):
     doc = fitz.open(filepath)
     chunks = []
     total_pages = len(doc)
@@ -79,15 +172,13 @@ def ingest_pdf(filepath, chunk_size=200, progress_callback=None):
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             text = pytesseract.image_to_string(img)
 
-        for i in range(0, len(text), chunk_size):
-            piece = text[i:i + chunk_size]
-            if piece.strip():
-                chunks.append({
-                    "text": piece,
-                    "source": filepath,
-                    "source_type": "pdf",
-                    "location": f"page {page_num + 1}"
-                })
+        for piece, offset in chunk_text(text, chunk_size=chunk_size, overlap=overlap):
+            chunks.append({
+                "text": piece,
+                "source": filepath,
+                "source_type": "pdf",
+                "location": f"page {page_num + 1}"
+            })
 
         if progress_callback:
             progress_callback(page_num + 1, total_pages)
@@ -95,7 +186,7 @@ def ingest_pdf(filepath, chunk_size=200, progress_callback=None):
     return chunks
 
 
-def ingest_web_article(url, chunk_size=200):
+def ingest_web_article(url, chunk_size=500, overlap=50):
     downloaded = trafilatura.fetch_url(url)
     text = trafilatura.extract(downloaded)
 
@@ -103,13 +194,11 @@ def ingest_web_article(url, chunk_size=200):
         return []
 
     chunks = []
-    for i in range(0, len(text), chunk_size):
-        piece = text[i:i + chunk_size]
-        if piece.strip():
-            chunks.append({
-                "text": piece,
-                "source": url,
-                "source_type": "web",
-                "location": f"position {i}"
-            })
+    for piece, offset in chunk_text(text, chunk_size=chunk_size, overlap=overlap):
+        chunks.append({
+            "text": piece,
+            "source": url,
+            "source_type": "web",
+            "location": f"position {offset}"
+        })
     return chunks

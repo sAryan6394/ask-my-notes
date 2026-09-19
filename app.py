@@ -3,29 +3,15 @@ import numpy as np
 import os
 import tempfile
 import re
-import pickle
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from google import genai
 from ingestion import ingest_text_file, ingest_youtube, ingest_pdf, ingest_web_article
+from vector_store import VectorStore
 
 load_dotenv()
 
 st.set_page_config(page_title="Ask My Notes", page_icon="🔎", layout="centered")
-
-STORE_PATH = "vector_store.pkl"
-
-
-def save_store():
-    with open(STORE_PATH, "wb") as f:
-        pickle.dump(st.session_state.chunks, f)
-
-
-def load_store():
-    if os.path.exists(STORE_PATH):
-        with open(STORE_PATH, "rb") as f:
-            return pickle.load(f)
-    return []
 
 
 st.markdown("""
@@ -183,13 +169,8 @@ def load_client():
 model = load_model()
 client = load_client()
 
-if "chunks" not in st.session_state:
-    st.session_state.chunks = load_store()
-if "embeddings_matrix" not in st.session_state:
-    if st.session_state.chunks:
-        st.session_state.embeddings_matrix = np.array([c["embedding"] for c in st.session_state.chunks])
-    else:
-        st.session_state.embeddings_matrix = None
+if "vector_store" not in st.session_state:
+    st.session_state.vector_store = VectorStore()  # loads from disk if present
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -199,26 +180,7 @@ def add_chunks(new_chunks):
         return
     texts = [c["text"] for c in new_chunks]
     batch_embeddings = model.encode(texts)
-
-    for c, emb in zip(new_chunks, batch_embeddings):
-        c["embedding"] = emb
-
-    st.session_state.chunks.extend(new_chunks)
-
-    all_embeddings = np.array([c["embedding"] for c in st.session_state.chunks])
-    st.session_state.embeddings_matrix = all_embeddings
-    save_store()
-
-
-def vectorized_search(query_embedding, top_k=5):
-    matrix = st.session_state.embeddings_matrix
-    q = query_embedding
-
-    norms = np.linalg.norm(matrix, axis=1) * np.linalg.norm(q)
-    scores = np.dot(matrix, q) / norms
-
-    top_indices = np.argsort(scores)[::-1][:top_k]
-    return [(scores[i], st.session_state.chunks[i]) for i in top_indices]
+    st.session_state.vector_store.add(new_chunks, batch_embeddings)
 
 
 def extract_youtube_id(url_or_id):
@@ -241,7 +203,7 @@ def format_history(history, max_turns=4):
 
 
 def render_line_sidebar():
-    sources = list(dict.fromkeys(c["source"] for c in st.session_state.chunks))
+    sources = list(dict.fromkeys(c["source"] for c in st.session_state.vector_store.chunks))
     if not sources:
         return
 
@@ -277,7 +239,7 @@ with st.sidebar:
     if uploaded_files:
         new_files = [
             f for f in uploaded_files
-            if not any(f.name == c["source"] for c in st.session_state.chunks)
+            if not any(f.name == c["source"] for c in st.session_state.vector_store.chunks)
         ]
 
         if new_files:
@@ -319,7 +281,7 @@ with st.sidebar:
     yt_input = st.text_input("YouTube URL or ID", placeholder="Paste a link...")
     if st.button("Add video", use_container_width=True) and yt_input:
         video_id = extract_youtube_id(yt_input)
-        already_added = any(video_id in c["source"] for c in st.session_state.chunks)
+        already_added = any(video_id in c["source"] for c in st.session_state.vector_store.chunks)
         if not already_added:
             with st.spinner("Fetching transcript..."):
                 new_chunks = ingest_youtube(video_id)
@@ -328,7 +290,7 @@ with st.sidebar:
 
     web_input = st.text_input("Article URL", placeholder="Paste a link...")
     if st.button("Add article", use_container_width=True) and web_input:
-        already_added = any(web_input == c["source"] for c in st.session_state.chunks)
+        already_added = any(web_input == c["source"] for c in st.session_state.vector_store.chunks)
         if not already_added:
             with st.spinner("Fetching article..."):
                 new_chunks = ingest_web_article(web_input)
@@ -336,16 +298,13 @@ with st.sidebar:
             st.success(f"Article added — {len(new_chunks)} chunks")
 
     st.divider()
-    st.caption(f"{len(st.session_state.chunks)} chunks loaded")
+    st.caption(f"{len(st.session_state.vector_store)} chunks loaded")
     render_line_sidebar()
 
-    if st.session_state.chunks:
+    if len(st.session_state.vector_store) > 0:
         st.divider()
         if st.button("Clear all sources", use_container_width=True):
-            st.session_state.chunks = []
-            st.session_state.embeddings_matrix = None
-            if os.path.exists(STORE_PATH):
-                os.remove(STORE_PATH)
+            st.session_state.vector_store.clear()
             st.rerun()
 
 for msg in st.session_state.messages:
@@ -355,7 +314,7 @@ for msg in st.session_state.messages:
 question = st.chat_input("Ask a question...")
 
 if question:
-    if not st.session_state.chunks:
+    if len(st.session_state.vector_store) == 0:
         st.warning("Add at least one source first.")
     else:
         history_before = st.session_state.messages.copy()
@@ -366,7 +325,7 @@ if question:
 
         contextual_query = build_contextual_query(question, history_before)
         query_embedding = model.encode(contextual_query)
-        top_chunks = vectorized_search(query_embedding, top_k=5)
+        top_chunks = st.session_state.vector_store.search(query_embedding, top_k=5)
 
         combined_context = "\n\n".join(
             f"[Source: {c['source']} @ {c['location']}]\n{c['text']}"
