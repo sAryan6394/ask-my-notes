@@ -3,6 +3,7 @@ import numpy as np
 import os
 import tempfile
 import re
+import time
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from google import genai
@@ -10,6 +11,7 @@ from ingestion import ingest_text_file, ingest_youtube, ingest_pdf
 from vector_store import VectorStore
 from hybrid_search import HybridSearch
 from reranker import Reranker
+import telemetry
 
 load_dotenv()
 
@@ -177,6 +179,8 @@ model = load_model()
 client = load_client()
 reranker = load_reranker()
 
+telemetry.init_db()
+
 if "vector_store" not in st.session_state:
     st.session_state.vector_store = VectorStore()  # loads from disk if present
 if "hybrid_search" not in st.session_state:
@@ -326,8 +330,17 @@ if question:
 
         contextual_query = build_contextual_query(question, history_before)
         query_embedding = model.encode(contextual_query)
+
+        retrieval_start = time.perf_counter()
+        # Separate, cheap dense-only lookup purely for a true 0-1 cosine
+        # similarity score to log — the hybrid/reranked results below use
+        # RRF and cross-encoder scores, which aren't on a comparable scale.
+        dense_top = st.session_state.vector_store.search(query_embedding, top_k=1)
+        top_similarity_score = dense_top[0][0] if dense_top else 0.0
+
         candidates = st.session_state.hybrid_search.search(contextual_query, query_embedding, top_k=15)
         top_chunks = reranker.rerank(contextual_query, candidates, top_k=3)
+        retrieval_latency_ms = (time.perf_counter() - retrieval_start) * 1000
 
         combined_context = "\n\n".join(
             f"[Source: {c['source']} @ {c['location']}]\n{c['text']}"
@@ -352,11 +365,43 @@ Answer:"""
 
         with st.chat_message("assistant"):
             with st.spinner("Searching your sources..."):
+                generation_start = time.perf_counter()
                 response = client.models.generate_content(
                     model="gemini-3.6-flash",
                     contents=prompt
                 )
+                generation_latency_ms = (time.perf_counter() - generation_start) * 1000
                 answer = response.text
                 st.markdown(answer)
 
+                prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                completion_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+
+                query_id = telemetry.log_query(
+                    user_query=question,
+                    retrieval_latency_ms=retrieval_latency_ms,
+                    generation_latency_ms=generation_latency_ms,
+                    top_similarity_score=top_similarity_score,
+                    retrieved_chunks_count=len(top_chunks),
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
+                st.session_state.last_query_id = query_id
+                st.session_state.feedback_given = False
+
         st.session_state.messages.append({"role": "assistant", "content": answer})
+
+if st.session_state.get("last_query_id") and not st.session_state.get("feedback_given"):
+    fb_col1, fb_col2, _ = st.columns([1, 1, 8])
+    with fb_col1:
+        if st.button("👍", key=f"fb_up_{st.session_state.last_query_id}"):
+            telemetry.update_feedback(st.session_state.last_query_id, 1)
+            st.session_state.feedback_given = True
+            st.rerun()
+    with fb_col2:
+        if st.button("👎", key=f"fb_down_{st.session_state.last_query_id}"):
+            telemetry.update_feedback(st.session_state.last_query_id, -1)
+            st.session_state.feedback_given = True
+            st.rerun()
+elif st.session_state.get("feedback_given"):
+    st.caption("Thanks for the feedback!")
