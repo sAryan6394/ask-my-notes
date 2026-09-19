@@ -9,6 +9,7 @@ from google import genai
 from ingestion import ingest_text_file, ingest_youtube, ingest_pdf
 from vector_store import VectorStore
 from hybrid_search import HybridSearch
+from reranker import Reranker
 
 load_dotenv()
 
@@ -167,8 +168,14 @@ def load_client():
     return genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 
+@st.cache_resource
+def load_reranker():
+    return Reranker()
+
+
 model = load_model()
 client = load_client()
+reranker = load_reranker()
 
 if "vector_store" not in st.session_state:
     st.session_state.vector_store = VectorStore()  # loads from disk if present
@@ -319,7 +326,8 @@ if question:
 
         contextual_query = build_contextual_query(question, history_before)
         query_embedding = model.encode(contextual_query)
-        top_chunks = st.session_state.hybrid_search.search(contextual_query, query_embedding, top_k=5)
+        candidates = st.session_state.hybrid_search.search(contextual_query, query_embedding, top_k=15)
+        top_chunks = reranker.rerank(contextual_query, candidates, top_k=3)
 
         combined_context = "\n\n".join(
             f"[Source: {c['source']} @ {c['location']}]\n{c['text']}"
