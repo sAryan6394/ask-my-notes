@@ -15,7 +15,7 @@ import telemetry
 
 load_dotenv()
 
-st.set_page_config(page_title="Ask My Notes", page_icon="🔎", layout="centered")
+st.set_page_config(page_title="Vantage", page_icon="🔎", layout="centered")
 
 
 st.markdown("""
@@ -237,7 +237,7 @@ def render_line_sidebar():
     st.markdown("".join(parts), unsafe_allow_html=True)
 
 
-st.markdown('<div class="app-header">Ask My Notes</div>', unsafe_allow_html=True)
+st.markdown('<div class="app-header">Vantage</div>', unsafe_allow_html=True)
 st.markdown('<div class="app-subtitle">Ask questions across your PDFs, lectures, and articles — grounded, cited answers.</div>', unsafe_allow_html=True)
 
 with st.sidebar:

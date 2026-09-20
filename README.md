@@ -1,4 +1,4 @@
-# Ask-My-Notes
+# Vantage
 
 A multi-source RAG (Retrieval-Augmented Generation) knowledge base that lets you
 ask questions across your PDFs and YouTube lecture transcripts — with answers
