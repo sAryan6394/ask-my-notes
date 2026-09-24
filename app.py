@@ -20,7 +20,7 @@ st.set_page_config(page_title="Vantage", page_icon="🔎", layout="centered")
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
@@ -28,9 +28,14 @@ st.markdown("""
 
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    header[data-testid="stHeader"] {display: none;}
+
+    [data-testid^="stChatMessageAvatar"] {
+        display: none !important;
+    }
 
     .stApp {
-        background-color: #000000;
+        background-color: #0F1512;
     }
 
     .block-container {
@@ -39,122 +44,207 @@ st.markdown("""
     }
 
     .app-header {
-        font-size: 2.6rem;
-        font-weight: 700;
-        text-align: center;
-        margin-bottom: 0.3rem;
-        background: linear-gradient(90deg, #f5f5f5, #ef4444, #f5f5f5);
-        background-size: 200% auto;
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-        animation: shimmer 4s linear infinite;
-    }
-
-    @keyframes shimmer {
-        0% { background-position: 0% center; }
-        100% { background-position: 200% center; }
+        font-size: 2.2rem;
+        font-weight: 600;
+        text-align: left;
+        margin-bottom: 0.2rem;
+        color: #DCE6DF;
+        letter-spacing: -0.02em;
     }
 
     .app-subtitle {
-        color: #9a9a9a;
-        font-size: 0.95rem;
-        text-align: center;
-        margin-bottom: 2.5rem;
+        color: #6E7D74;
+        font-size: 0.9rem;
+        text-align: left;
+        margin-bottom: 1.2rem;
+    }
+
+    .app-header-wrap {
+        border-bottom: 1px solid #1E2A23;
+        padding-bottom: 1.4rem;
+        margin-bottom: 1.8rem;
     }
 
     [data-testid="stChatMessage"] {
-        background-color: #1c1c1c;
-        border: 1px solid #2a2a2a;
-        border-radius: 14px;
-        padding: 0.7rem 1rem;
-        margin-bottom: 0.7rem;
+        background-color: #1A2620;
+        border: 1px solid #263029;
+        border-radius: 12px;
+        padding: 0.85rem 1.1rem;
+        margin-bottom: 0.6rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    }
+
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+        background-color: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0.4rem 1.1rem;
+    }
+
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) p {
+        color: #8A968E;
+        font-size: 0.92rem;
     }
 
     a, a:visited {
-        color: #ef4444;
+        color: #E8B34A;
     }
 
     section[data-testid="stSidebar"] {
-        background-color: #141414;
-        border-right: 1px solid #2a2a2a;
+        background-color: #0C120F;
+        border-right: 1px solid #1E2A23;
     }
 
     [data-testid="stSidebarContent"] {
-        background-color: #141414;
+        background-color: #0C120F;
+    }
+
+    section[data-testid="stSidebar"] h3 {
+        color: #6E7D74;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-top: 0.5rem;
     }
 
     .stButton button {
         border-radius: 10px;
         font-weight: 500;
-        background-color: #dc2626;
-        color: white;
-        border: none;
+        background-color: #1A2620;
+        color: #E8B34A;
+        border: 1px solid #263029;
     }
 
     .stButton button:hover {
-        background-color: #ef4444;
-        color: white;
+        background-color: #263029;
+        border-color: #E8B34A;
+        color: #E8B34A;
+    }
+
+    .stButton button[kind="primary"] {
+        background-color: #E8B34A;
+        color: #0F1512;
+        border: 1px solid #E8B34A;
+    }
+
+    .stButton button[kind="primary"]:hover {
+        background-color: #F2C368;
+        border-color: #F2C368;
+        color: #0F1512;
     }
 
     [data-testid="stChatInput"] {
-        border-radius: 14px;
-        background-color: #1c1c1c;
+        border-radius: 999px;
+        background-color: #1A2620;
+        border: 1px solid #263029;
+    }
+
+    [data-testid="stChatInput"]:focus-within {
+        border-color: #E8B34A !important;
+        box-shadow: none !important;
     }
 
     input, textarea {
-        background-color: #1c1c1c !important;
-        color: #f5f5f5 !important;
+        background-color: #1A2620 !important;
+        color: #DCE6DF !important;
+        outline: none !important;
+        box-shadow: none !important;
+    }
+
+    input:focus, textarea:focus {
+        outline: none !important;
+        box-shadow: none !important;
+        border-color: #E8B34A !important;
+    }
+
+    [data-baseweb="base-input"]:focus-within {
+        border-color: #E8B34A !important;
+        box-shadow: none !important;
     }
 
     .stProgress > div > div {
-        background-color: #ef4444;
+        background-color: #E8B34A;
     }
 
     .line-sidebar {
-        padding-left: 70px;
+        padding-left: 26px;
         margin-top: 0.5rem;
     }
 
     .line-sidebar__item {
         position: relative;
-        padding: 10px 0;
+        padding: 8px 0;
         cursor: default;
     }
 
     .line-sidebar__marker {
         position: absolute;
         top: 50%;
-        left: -70px;
+        left: -26px;
         height: 1px;
-        width: 60px;
-        background-color: #4a4a4a;
-        transform: translateY(-50%) scaleX(0.7);
-        transition: all 0.25s ease;
+        width: 16px;
+        background-color: #3A473F;
+        transform: translateY(-50%);
+        transition: all 0.2s ease;
     }
 
     .line-sidebar__item:hover .line-sidebar__marker {
-        background-color: #ef4444;
-        transform: translateY(-50%) scaleX(1);
+        background-color: #E8B34A;
+        width: 20px;
     }
 
     .line-sidebar__label {
-        color: #9a9a9a;
-        font-size: 0.9rem;
-        transition: all 0.25s ease;
+        color: #8A968E;
+        font-size: 0.87rem;
+        transition: all 0.2s ease;
         display: inline-block;
     }
 
     .line-sidebar__item:hover .line-sidebar__label {
-        color: #ef4444;
-        transform: translateX(10px);
+        color: #DCE6DF;
     }
 
     .line-sidebar__index {
-        font-family: monospace;
+        font-family: 'JetBrains Mono', monospace;
         margin-right: 8px;
         opacity: 0.5;
         font-size: 0.8em;
+    }
+
+    .confidence-meter {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 0.9rem;
+        padding-top: 0.7rem;
+        border-top: 1px solid #22302A;
+    }
+
+    .confidence-meter__track {
+        flex: 0 0 90px;
+        height: 4px;
+        border-radius: 2px;
+        background-color: #263029;
+        overflow: hidden;
+    }
+
+    .confidence-meter__fill {
+        height: 100%;
+        background-color: #E8B34A;
+        border-radius: 2px;
+    }
+
+    .confidence-meter__value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.72rem;
+        color: #6E7D74;
+    }
+
+    .error-card {
+        color: #C97A63;
+        font-size: 0.92rem;
+        padding: 0.4rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -237,8 +327,12 @@ def render_line_sidebar():
     st.markdown("".join(parts), unsafe_allow_html=True)
 
 
-st.markdown('<div class="app-header">Vantage</div>', unsafe_allow_html=True)
-st.markdown('<div class="app-subtitle">Ask questions across your PDFs, lectures, and articles — grounded, cited answers.</div>', unsafe_allow_html=True)
+st.markdown("""
+<div class="app-header-wrap">
+    <div class="app-header">Vantage</div>
+    <div class="app-subtitle">Ask questions across your PDFs, lectures, and articles — grounded, cited answers.</div>
+</div>
+""", unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("### Sources")
@@ -293,7 +387,7 @@ with st.sidebar:
             progress_bar.empty()
 
     yt_input = st.text_input("YouTube URL or ID", placeholder="Paste a link...")
-    if st.button("Add video", use_container_width=True) and yt_input:
+    if st.button("Add video", use_container_width=True, type="primary") and yt_input:
         video_id = extract_youtube_id(yt_input)
         already_added = any(video_id in c["source"] for c in st.session_state.vector_store.chunks)
         if not already_added:
@@ -365,14 +459,37 @@ Answer:"""
 
         with st.chat_message("assistant"):
             with st.spinner("Searching your sources..."):
-                generation_start = time.perf_counter()
-                response = client.models.generate_content(
-                    model="gemini-3.6-flash",
-                    contents=prompt
-                )
-                generation_latency_ms = (time.perf_counter() - generation_start) * 1000
-                answer = response.text
+                try:
+                    generation_start = time.perf_counter()
+                    response = client.models.generate_content(
+                        model="gemini-3.6-flash",
+                        contents=prompt
+                    )
+                    generation_latency_ms = (time.perf_counter() - generation_start) * 1000
+                    answer = response.text
+                except Exception as e:
+                    st.markdown(
+                        '<div class="error-card">'
+                        "Couldn't reach the AI model just now — this is usually temporary "
+                        "(the API may be under heavy load). Try asking again in a moment."
+                        '</div>',
+                        unsafe_allow_html=True
+                    )
+                    print(f"[Vantage] Generation failed: {e}")
+                    st.stop()
+
                 st.markdown(answer)
+
+                confidence_pct = max(0.0, min(1.0, top_similarity_score)) * 100
+                st.markdown(
+                    f'<div class="confidence-meter">'
+                    f'<div class="confidence-meter__track">'
+                    f'<div class="confidence-meter__fill" style="width:{confidence_pct:.0f}%"></div>'
+                    f'</div>'
+                    f'<span class="confidence-meter__value">{top_similarity_score:.2f} similarity</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
 
                 prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
                 completion_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
