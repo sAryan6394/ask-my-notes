@@ -28,7 +28,19 @@ st.markdown("""
 
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header[data-testid="stHeader"] {display: none;}
+    header[data-testid="stHeader"] {
+        background: transparent;
+    }
+
+    [data-testid="stToolbar"] {
+        visibility: hidden;
+    }
+
+    .sidebar-toggle button {
+        border-radius: 8px !important;
+        padding: 0.25rem 0.6rem !important;
+        font-size: 0.85rem !important;
+    }
 
     [data-testid^="stChatMessageAvatar"] {
         display: none !important;
@@ -277,6 +289,8 @@ if "hybrid_search" not in st.session_state:
     st.session_state.hybrid_search = HybridSearch(st.session_state.vector_store)
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "sidebar_visible" not in st.session_state:
+    st.session_state.sidebar_visible = True
 
 
 def add_chunks(new_chunks):
@@ -326,6 +340,41 @@ def render_line_sidebar():
 
     st.markdown("".join(parts), unsafe_allow_html=True)
 
+
+# --- Sidebar visibility: explicitly force BOTH states via CSS, rather than
+# only ever emitting a hide rule and hoping Streamlit's native state agrees
+# when "visible" is true. Streamlit can leave the sidebar in a collapsed
+# native state (inline transform/width) that a bare display:block won't
+# undo, so we override those properties explicitly in both directions.
+if st.session_state.sidebar_visible:
+    st.markdown(
+        '''<style>
+        section[data-testid="stSidebar"] {
+            display: block !important;
+            width: 21rem !important;
+            min-width: 21rem !important;
+            margin-left: 0 !important;
+            transform: none !important;
+        }
+        </style>''',
+        unsafe_allow_html=True
+    )
+else:
+    st.markdown(
+        '''<style>
+        section[data-testid="stSidebar"] {
+            display: none !important;
+        }
+        </style>''',
+        unsafe_allow_html=True
+    )
+
+st.markdown('<div class="sidebar-toggle">', unsafe_allow_html=True)
+toggle_label = "Hide sources" if st.session_state.sidebar_visible else "Show sources"
+if st.button(toggle_label, key="sidebar_toggle_btn"):
+    st.session_state.sidebar_visible = not st.session_state.sidebar_visible
+    st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("""
 <div class="app-header-wrap">
