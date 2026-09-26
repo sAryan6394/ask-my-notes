@@ -105,6 +105,16 @@ st.markdown("""
     section[data-testid="stSidebar"] {
         background-color: #0C120F;
         border-right: 1px solid #1E2A23;
+        transition: width 0.3s ease, min-width 0.3s ease, opacity 0.2s ease;
+        overflow: hidden;
+    }
+
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebarCollapseButton"],
+    button[aria-label="Collapse sidebar"],
+    button[aria-label="Open sidebar"],
+    button[aria-label="Close sidebar"] {
+        display: none !important;
     }
 
     [data-testid="stSidebarContent"] {
@@ -341,20 +351,17 @@ def render_line_sidebar():
     st.markdown("".join(parts), unsafe_allow_html=True)
 
 
-# --- Sidebar visibility: explicitly force BOTH states via CSS, rather than
-# only ever emitting a hide rule and hoping Streamlit's native state agrees
-# when "visible" is true. Streamlit can leave the sidebar in a collapsed
-# native state (inline transform/width) that a bare display:block won't
-# undo, so we override those properties explicitly in both directions.
+# --- Sidebar visibility: animate width/opacity instead of toggling
+# display:none <-> block (display can't be CSS-transitioned).
 if st.session_state.sidebar_visible:
     st.markdown(
         '''<style>
         section[data-testid="stSidebar"] {
-            display: block !important;
             width: 21rem !important;
             min-width: 21rem !important;
             margin-left: 0 !important;
             transform: none !important;
+            opacity: 1 !important;
         }
         </style>''',
         unsafe_allow_html=True
@@ -363,7 +370,11 @@ else:
     st.markdown(
         '''<style>
         section[data-testid="stSidebar"] {
-            display: none !important;
+            width: 0rem !important;
+            min-width: 0rem !important;
+            opacity: 0 !important;
+            padding: 0 !important;
+            border: none !important;
         }
         </style>''',
         unsafe_allow_html=True
@@ -508,15 +519,33 @@ Answer:"""
 
         with st.chat_message("assistant"):
             with st.spinner("Searching your sources..."):
-                try:
-                    generation_start = time.perf_counter()
-                    response = client.models.generate_content(
-                        model="gemini-3.6-flash",
-                        contents=prompt
-                    )
-                    generation_latency_ms = (time.perf_counter() - generation_start) * 1000
-                    answer = response.text
-                except Exception as e:
+                # gemini-3.1-flash-lite: ~3x the rate limit of 3.6-flash and
+                # far cheaper, fine for grounded QA over retrieved context
+                # (no multi-step reasoning needed here). Retry covers
+                # transient 503s, which can happen on any tier.
+                GENERATION_MODEL = "gemini-3.1-flash-lite"
+                max_retries = 2
+                last_error = None
+                generation_start = time.perf_counter()
+                response = None
+
+                for attempt in range(max_retries + 1):
+                    try:
+                        response = client.models.generate_content(
+                            model=GENERATION_MODEL,
+                            contents=prompt
+                        )
+                        last_error = None
+                        break
+                    except Exception as e:
+                        last_error = e
+                        print(f"[Vantage] Generation attempt {attempt + 1} failed: {e}")
+                        if attempt < max_retries:
+                            time.sleep(1.5 * (attempt + 1))
+
+                generation_latency_ms = (time.perf_counter() - generation_start) * 1000
+
+                if last_error is not None:
                     st.markdown(
                         '<div class="error-card">'
                         "Couldn't reach the AI model just now — this is usually temporary "
@@ -524,8 +553,9 @@ Answer:"""
                         '</div>',
                         unsafe_allow_html=True
                     )
-                    print(f"[Vantage] Generation failed: {e}")
                     st.stop()
+
+                answer = response.text
 
                 st.markdown(answer)
 

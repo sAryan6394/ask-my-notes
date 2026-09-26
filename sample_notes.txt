@@ -1,7 +1,0 @@
-Photosynthesis is the process by which plants convert light energy into chemical energy.
-It occurs in the chloroplasts of plant cells using chlorophyll.
-The process uses carbon dioxide and water, producing glucose and oxygen as byproducts.
-
-Cellular respiration is the reverse process. Cells break down glucose using oxygen
-to release energy, producing carbon dioxide and water as byproducts.
-This happens in the mitochondria.
